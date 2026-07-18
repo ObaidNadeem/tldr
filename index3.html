@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tl;dr toggle · demo (rewrite)</title>
+<style>
+  :root {
+    --bg: #FFFFFF;
+    --bg-elevated: #F4F4F5;
+    --text-1: #111113;
+    --text-2: #3F3F46;
+    --text-3: #8E8E96;
+    --border: #E4E4E7;
+    --accent: #10B981;
+    --ease-expo: cubic-bezier(0.19, 1, 0.22, 1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text-2);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    font-size: 17px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .mono {
+    font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+  }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+    height: 64px;
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { color: var(--text-1); font-weight: 600; font-size: 14px; }
+  .brand span { color: var(--text-3); font-weight: 400; }
+
+  .nav-right { display: flex; align-items: center; gap: 16px; }
+
+  .count { color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .count b { color: var(--text-2); font-weight: 500; }
+
+  /* ---------- toggle ---------- */
+  .tldr-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: var(--text-3);
+    font-family: inherit;
+    transition: color 150ms ease;
+  }
+  .tldr-control:hover { color: var(--text-1); }
+  .tldr-control .label { font-size: 12px; }
+
+  .switch {
+    position: relative;
+    width: 34px; height: 19px;
+    border-radius: 999px;
+    background: #D4D4D8;
+    transition: background 250ms ease;
+    flex-shrink: 0;
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 15px; height: 15px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 300ms var(--ease-expo);
+  }
+  html[data-tldr] .switch { background: var(--accent); }
+  html[data-tldr] .switch::after { transform: translateX(15px); }
+  html.no-anim .switch, html.no-anim .switch::after { transition: none !important; }
+
+  /* ---------- content ---------- */
+  main {
+    max-width: 620px;
+    margin: 0 auto;
+    padding: 160px 24px 120px;
+  }
+
+  .title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+  h1 {
+    color: var(--text-1);
+    font-size: 34px;
+    line-height: 1.25;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .meta { color: var(--text-3); margin-bottom: 48px; }
+
+  h2 {
+    color: var(--text-1);
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 48px 0 12px;
+  }
+  p { margin-bottom: 20px; }
+  p strong { color: var(--text-1); font-weight: 600; }
+
+  /* ---------- rewrite effect ----------
+     The stain is its own layer: absolutely-positioned blobs placed
+     behind each line fragment of a removable span, with an SVG
+     turbulence filter so the edges wobble like a real highlighter.
+     They clip open/closed HORIZONTALLY (left→right marker strokes),
+     and the surrounding text slides in sync — one continuous motion,
+     no jumps, no scaling.
+     .x = removable span (plain text; no background of its own)
+     .xi = inner wrapper: glyph shine + dissolve/materialize          */
+  .x { font-size: 1em; }
+  .xi {
+    background-image:
+      linear-gradient(105deg,
+        transparent 42%, rgba(255, 255, 255, 0.9) 50%, transparent 58%),
+      linear-gradient(var(--text-2), var(--text-2));
+    background-repeat: no-repeat, no-repeat;
+    background-position: 200% 50%, 0 0;
+    background-size: 250% 100%, 100% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* rest state: removed words don't exist in the flow */
+  html[data-tldr] .x { display: none; }
+
+  /* mid-transition: .x in flow as a blank gap (expand) */
+  html.gap-open .xi { opacity: 0; }
+
+  .stain {
+    position: absolute;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: 11px;
+    background-image:
+      linear-gradient(105deg,
+        transparent 44%, rgba(255, 255, 255, 0.95) 50%, transparent 56%),
+      linear-gradient(100deg,
+        rgba(167, 199, 231, 0.72),  /* baby blue  #A7C7E7 */
+        rgba(230, 230, 250, 0.72),  /* lavender   #E6E6FA */
+        rgba(255, 209, 220, 0.72)); /* blush pink #FFD1DC */
+    background-repeat: no-repeat, no-repeat;
+    background-position: 200% 50%, 50% 50%;
+    background-size: 250% 100%, 100% 100%;
+    filter: url(#stain-wobble);
+  }
+
+  /* glyph shine + dissolve (timings mirror the JS stain timeline) */
+  html.ph-dissolve .xi {
+    animation: ink-dissolve 950ms both calc(var(--d, 0) * 10ms);
+  }
+  html.ph-materialize .xi {
+    animation: ink-materialize 950ms both calc(var(--d, 0) * 10ms);
+  }
+  @keyframes ink-dissolve {
+    0%, 23% { background-position: 200% 50%, 0 0; opacity: 1; filter: blur(0);
+              animation-timing-function: ease-in; }
+    59%  { background-position: -80% 50%, 0 0;      /* the sweep erases the words */
+           opacity: 0; filter: blur(5px); }
+    100% { opacity: 0; filter: blur(5px);
+           background-position: -80% 50%, 0 0; }
+  }
+  @keyframes ink-materialize {
+    0%   { opacity: 0; filter: blur(5px);
+           background-position: 200% 50%, 0 0; }
+    27%  { opacity: 0; filter: blur(5px);           /* stain settles first */
+           background-position: 200% 50%, 0 0;
+           animation-timing-function: ease-out; }
+    63%  { opacity: 1; filter: blur(0);             /* print completes as the band exits */
+           background-position: -80% 50%, 0 0; }
+    100% { opacity: 1; filter: blur(0);
+           background-position: -80% 50%, 0 0; }
+  }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    50% { box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.25); }
+  }
+  .tldr-control.pulse .switch { animation: pulse 1.8s ease 2; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .xi { animation: none !important; }
+    .tldr-control.pulse { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- organic highlighter edges: turbulence displacement -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="stain-wobble" x="-10%" y="-30%" width="120%" height="160%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.012 0.09"
+                  numOctaves="2" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="9"
+                       xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+
+<nav>
+  <div class="brand">obaid<span> · design engineer</span></div>
+  <div class="nav-right">
+    <div class="count mono" id="count" aria-hidden="true"></div>
+  </div>
+</nav>
+
+<main>
+  <article id="article">
+    <div class="title-row">
+      <h1>I make websites move</h1>
+      <button class="tldr-control pulse" id="toggle" aria-pressed="false">
+        <span class="label mono">tl;dr</span>
+        <span class="switch" aria-hidden="true"></span>
+      </button>
+    </div>
+    <p class="meta mono">experiment 001 · tl;dr toggle · 2026</p>
+
+    <p>
+      I've been <x class="x">quietly </x>shipping shader-driven sites since
+      2021<x class="x">, back when putting WebGL on a landing page got you weird
+      looks</x>. <strong>Most sites were still doing CSS fades</strong><x class="x"> and
+      maybe a scroll library if they were feeling brave</x>, and anything on the GPU read
+      as showing off. Not anymore.<x class="x"> Now every launch page wants a shader.</x>
+    </p>
+
+    <p>
+      A shader is a tiny program that runs on your GPU<x class="x">, once per pixel,
+      thousands of pixels at a time</x>. That's how you get effects the DOM can't
+      touch<x class="x">: fluid distortion, grain, light, all locked at sixty
+      frames</x>. The tradeoff is a different way of thinking<x class="x">, closer to
+      painting with math than stacking divs</x>.
+    </p>
+
+    <h2>Restraint is the flex</h2>
+
+    <p>
+      The best shader work is almost invisible<x class="x">. You feel it before you
+      clock it</x>. <strong>One signature effect beats ten decorative
+      ones</strong><x class="x">, every single time</x>. A hero that reacts to your
+      cursor says more than a page drowning in motion<x class="x"> ever will, because
+      control reads louder than enthusiasm</x>.
+    </p>
+
+    <p>
+      This page is the demo<x class="x">, which felt like the honest way to do it</x>.
+      Every sentence was written once, with the skippable words marked<x class="x"> right
+      in the source</x>. Hit the toggle and the filler burns off<x class="x"> in a little
+      flash</x> and the point survives<x class="x">, just denser</x>. Same
+      sentence<x class="x">, wearing less. Nothing generated, nothing rewritten</x>.
+    </p>
+  </article>
+</main>
+
+<script>
+  const html = document.documentElement;
+  const toggle = document.getElementById("toggle");
+  const countEl = document.getElementById("count");
+  const article = document.getElementById("article");
+
+  const EXPO = "cubic-bezier(0.19, 1, 0.22, 1)";
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const paras = [...article.querySelectorAll("p")].filter(p => p.querySelector(".x"));
+  const xs = [...article.querySelectorAll(".x")];
+
+  // .x gets an inner .xi wrapper, staggered
+  xs.forEach((s, i) => {
+    const inner = document.createElement("span");
+    inner.className = "xi";
+    inner.append(...s.childNodes);
+    s.append(inner);
+    s.style.setProperty("--d", i);
+    s._i = i;
+  });
+
+  for (const p of paras) {
+    p.style.position = "relative";
+    p.style.zIndex = "0";
+  }
+
+  /* ---------- state (attr, aria, counter) ---------- */
+  const words = el => (el.textContent.match(/\S+/g) || []).length;
+  const full = words(article);
+  const clone = article.cloneNode(true);
+  clone.querySelectorAll(".x").forEach(s => s.remove());
+  const short = words(clone);
+
+  function setState(on) {
+    html.toggleAttribute("data-tldr", on);
+    toggle.setAttribute("aria-pressed", on);
+    xs.forEach(s => s.setAttribute("aria-hidden", on));
+    countEl.innerHTML = on ? `<b>${short}</b> / ${full} words` : `<b>${full}</b> words`;
+  }
+
+  /* ---------- stain blobs: one per line fragment of each .x ---------- */
+  let stains = [];
+
+  function buildStains() {
+    removeStains();
+    for (const s of xs) {
+      const p = s.closest("p");
+      const pr = p.getBoundingClientRect();
+      for (const r of s.getClientRects()) {
+        if (r.width < 2) continue;
+        const d = document.createElement("div");
+        d.className = "stain";
+        d.style.left = r.left - pr.left - 5 + "px";
+        d.style.top = r.top - pr.top - 3 + "px";
+        d.style.width = r.width + 10 + "px";
+        d.style.height = r.height + 6 + "px";
+        d._i = s._i;
+        d.style.opacity = "0"; // hidden until its fade-in runs
+        p.append(d);
+        stains.push(d);
+      }
+    }
+  }
+  function removeStains() { stains.forEach(d => d.remove()); stains = []; }
+
+  /* ---------- soft reflow ----------
+     The paragraph briefly defocuses (slight blur + dim), the sentence
+     re-sets while soft, heights ease so the page never jumps, then it
+     refocuses. Reads as the text settling, not words teleporting.   */
+  function softReflow(on, onMutated, done) {
+    const fromHs = paras.map(p => p.offsetHeight);
+    const dy = on ? -5 : 5; // drift with the merge: up when collapsing, down when expanding
+    paras.forEach(p => anims.push(p.animate(
+      [{ opacity: 1, filter: "blur(0px)", transform: "translateY(0)" },
+       { opacity: 0.25, filter: "blur(3px)", transform: `translateY(${dy}px)` }],
+      { duration: 180, easing: "ease-in", fill: "forwards" })));
+
+    timers.push(setTimeout(() => {
+      setState(on);
+      html.classList.remove("ph-dissolve"); // safe now: words are display:none
+      if (onMutated) onMutated();
+      paras.forEach((p, i) => {
+        const toH = p.offsetHeight;
+        if (toH !== fromHs[i]) {
+          p.style.overflow = "hidden";
+          anims.push(p.animate(
+            [{ height: fromHs[i] + "px" }, { height: toH + "px" }],
+            { duration: 360, easing: EXPO, fill: "both" }));
+        }
+        anims.push(p.animate(
+          [{ opacity: 0.25, filter: "blur(3px)", transform: `translateY(${-dy * 1.6}px)` },
+           { opacity: 1, filter: "blur(0px)", transform: "translateY(0)" }],
+          { duration: 260, easing: "ease-out", fill: "both" }));
+      });
+      timers.push(setTimeout(() => {
+        paras.forEach(p => { p.style.overflow = ""; });
+        if (done) done();
+      }, 380));
+    }, 190));
+  }
+
+  /* ---------- transition orchestration ---------- */
+  let timers = [];
+  let anims = [];
+  // merge starts once the flashes are done (mirrors the expand order:
+  // there the settle also fully precedes the stain phase)
+  const STAIN_MS = 620;
+  const shinePos = ["200% 50%, 50% 50%", "-80% 50%, 50% 50%"];
+
+  function cancelAll() {
+    timers.forEach(clearTimeout); timers = [];
+    anims.forEach(a => a.cancel()); anims = [];
+    html.classList.remove("ph-dissolve", "ph-materialize", "gap-open");
+    paras.forEach(p => { p.style.overflow = ""; });
+    removeStains();
+  }
+
+  function collapse() {
+    buildStains();
+    for (const d of stains) {
+      const dl = d._i * 10;
+      // stain blooms over the words
+      anims.push(d.animate(
+        [{ opacity: 0 }, { opacity: 1 }],
+        { duration: 240, delay: dl, easing: "ease-out", fill: "both" }));
+      // shine crosses at full stain strength (flash stays visible)
+      anims.push(d.animate(
+        [{ backgroundPosition: shinePos[0] }, { backgroundPosition: shinePos[1] }],
+        { duration: 340, delay: dl + 220, easing: "ease-in-out", fill: "both" }));
+      // stain melts on the sweep's tail
+      anims.push(d.animate(
+        [{ opacity: 1 }, { opacity: 0 }],
+        { duration: 160, delay: dl + 440, easing: "ease-in", fill: "forwards" }));
+    }
+    html.classList.add("ph-dissolve"); // glyph shine + dissolve, in sync
+
+    timers.push(setTimeout(() => {
+      // sentence settles into place, overlapping the last flashes;
+      // ph-dissolve is released only after the state flip inside
+      // softReflow (prevents the words flashing back)
+      softReflow(true, null, () => {
+        anims.forEach(a => a.cancel()); anims = [];
+        removeStains();
+      });
+    }, STAIN_MS));
+  }
+
+  function expand() {
+    // gaps open with the soft defocus; the stain phase starts the moment
+    // the gaps exist (mid-refocus), not after the settle finishes
+    html.classList.add("gap-open");
+    softReflow(false, () => {
+      buildStains(); // final (expanded) layout, gaps just opened
+      timers.push(setTimeout(() => {
+      // let the refocus clear before the flash starts
+      html.classList.remove("gap-open");
+      html.classList.add("ph-materialize");
+      for (const d of stains) {
+        const dl = d._i * 10;
+        anims.push(d.animate(
+          [{ opacity: 0 }, { opacity: 1 }],
+          { duration: 240, delay: dl, easing: "ease-out", fill: "both" }));
+        // sweep waits for the stain to fully settle — no flicker
+        anims.push(d.animate(
+          [{ backgroundPosition: shinePos[0] }, { backgroundPosition: shinePos[1] }],
+          { duration: 340, delay: dl + 260, easing: "ease-in-out", fill: "both" }));
+        anims.push(d.animate(
+          [{ opacity: 1 }, { opacity: 0 }],
+          { duration: 240, delay: dl + 600, easing: "ease-in", fill: "forwards" }));
+      }
+      timers.push(setTimeout(() => {
+        html.classList.remove("ph-materialize");
+        removeStains();
+        anims.forEach(a => a.cancel()); anims = [];
+        paras.forEach(p => { p.style.overflow = ""; });
+      }, 1000 + xs.length * 10));
+    }, null);
+  }
+
+  /* ---------- wiring ---------- */
+  toggle.addEventListener("click", () => {
+    toggle.classList.remove("pulse");
+    const on = !html.hasAttribute("data-tldr");
+    cancelAll();
+    if (reduced) { setState(on); }
+    else if (on) collapse();
+    else expand();
+    localStorage.setItem("tldr", on ? "1" : "0");
+  });
+
+  addEventListener("keydown", e => {
+    if (e.key.toLowerCase() === "t" && !e.metaKey && !e.ctrlKey) toggle.click();
+  });
+
+  // restore persisted state instantly
+  html.classList.add("no-anim");
+  setState(localStorage.getItem("tldr") === "1");
+  requestAnimationFrame(() => requestAnimationFrame(() => html.classList.remove("no-anim")));
+</script>
+</body>
+</html>
